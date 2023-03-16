@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "POC_FunctionApp2": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7036",
+      "launchBrowser": false
+    }
+  }
+}
