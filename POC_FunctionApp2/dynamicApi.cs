@@ -12,6 +12,7 @@ using POC_FunctionApp2.models;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using Newtonsoft.Json.Linq;
 
 namespace POC_FunctionApp2
 {
@@ -76,33 +77,50 @@ namespace POC_FunctionApp2
 
         }
 
-
         [FunctionName("UpdateCustomFieldCollection")]
         public static async Task<IActionResult> UpdateCustomFieldCollection(
-           [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "customfields/{id}")] HttpRequest req,
-           ILogger log, string id)
+    [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "customfields/{id}")] HttpRequest req,
+    ILogger log, string id)
         {
-            log.LogInformation($"Updation items with: {id}");
+            log.LogInformation($"Updating Fields item with ID: {id}");
 
-            // get items from cosmos
-            var partitionKey = new PartitionKey(id);
-            var response = await _cosmosContainer.ReadItemAsync<CustomFieldCollection>(id, partitionKey);
-            var dynamicFieldItem = response.Resource;
-
-            if (dynamicFieldItem == null)
+            try
             {
-                return new NotFoundResult();
+                // Parse the request body
+                string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+                CustomFieldCollection newCustomFieldCollection = JsonConvert.DeserializeObject<CustomFieldCollection>(requestBody);
+
+                log.LogInformation($"Request body: {requestBody}");
+
+                // Get the existing item from the Cosmos DB container
+                var query = $"SELECT * FROM c WHERE c.id = '{id}'";
+                var iterator = _cosmosContainer.GetItemQueryIterator<CustomFieldCollection>(new QueryDefinition(query));
+                var results = await iterator.ReadNextAsync();
+                var existingItem = results.FirstOrDefault();
+
+                if (existingItem == null)
+                {
+                    log.LogInformation($"Item with ID {id} not found");
+                    return new NotFoundResult();
+                }
+
+                existingItem.Update(newCustomFieldCollection);
+
+                await _cosmosContainer.ReplaceItemAsync(existingItem, existingItem.id);
+
+                log.LogInformation($"Item with ID {id} updated successfully");
+
+                return new OkObjectResult(existingItem);
             }
-            //update the request body
-            string requestData = await new StreamReader(req.Body).ReadToEndAsync();
-            var data = JsonConvert.DeserializeObject<CustomFieldCollection>(requestData);
-
-            dynamicFieldItem.Update(data);
-
-            //update item in Cosmos
-            await _cosmosContainer.ReplaceItemAsync(dynamicFieldItem,id,partitionKey);
-            return new OkObjectResult(dynamicFieldItem);
+            catch (Exception ex)
+            {
+                log.LogError($"Error updating item with ID {id}: {ex.Message}");
+                return new StatusCodeResult(500);
+            }
         }
+
+
+
 
         [FunctionName("DeleteCustomFieldCollection")]
         public static async Task<IActionResult> DeleteCustomFieldCollection(
