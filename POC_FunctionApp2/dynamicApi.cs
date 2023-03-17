@@ -79,8 +79,8 @@ namespace POC_FunctionApp2
 
         [FunctionName("UpdateCustomFieldCollection")]
         public static async Task<IActionResult> UpdateCustomFieldCollection(
-    [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "customfields/{id}")] HttpRequest req,
-    ILogger log, string id)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "customfields/{id}")] HttpRequest req,
+        ILogger log, string id)
         {
             log.LogInformation($"Updating Fields item with ID: {id}");
 
@@ -90,7 +90,7 @@ namespace POC_FunctionApp2
                 string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
                 CustomFieldCollection newCustomFieldCollection = JsonConvert.DeserializeObject<CustomFieldCollection>(requestBody);
 
-                log.LogInformation($"Request body: {requestBody}");
+               // log.LogInformation($"Request body: {requestBody}");
 
                 // Get the existing item from the Cosmos DB container
                 var query = $"SELECT * FROM c WHERE c.id = '{id}'";
@@ -108,7 +108,7 @@ namespace POC_FunctionApp2
 
                 await _cosmosContainer.ReplaceItemAsync(existingItem, existingItem.id);
 
-                log.LogInformation($"Item with ID {id} updated successfully");
+              //  log.LogInformation($"Item with ID {id} updated successfully");
 
                 return new OkObjectResult(existingItem);
             }
@@ -120,40 +120,41 @@ namespace POC_FunctionApp2
         }
 
 
-
-
-        [FunctionName("DeleteCustomFieldCollection")]
-        public static async Task<IActionResult> DeleteCustomFieldCollection(
-    [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customfields/{id}")] HttpRequest req,
-    ILogger log, string id)
+        [FunctionName("DeleteAllCustomFieldCollections")]
+        public static async Task<IActionResult> DeleteAllCustomFieldCollections(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "customfields/{id}")] HttpRequest req,
+        ILogger log, string id)
         {
-            log.LogInformation($"Deleting items with ID: {id}");
-
-            //get items from cosmos
-            var partitionKey = new PartitionKey(id);
+            log.LogInformation($"Deleting all Fields items with ID: {id}");
 
             try
             {
-                //query for all items with the given ID
+                // Delete all items from the Cosmos DB container with the provided ID
                 var query = $"SELECT * FROM c WHERE c.id = '{id}'";
-                var iterator = _cosmosContainer.GetItemQueryIterator<dynamic>(new QueryDefinition(query));
+                var iterator = _cosmosContainer.GetItemQueryIterator<CustomFieldCollection>(new QueryDefinition(query));
 
-                //delete each item one by one
                 while (iterator.HasMoreResults)
                 {
-                    foreach (var item in await iterator.ReadNextAsync())
+                    var results = await iterator.ReadNextAsync();
+
+                    foreach (var item in results)
                     {
-                        await _cosmosContainer.DeleteItemAsync<CustomFieldCollection>(item.id, partitionKey);
+                        await _cosmosContainer.DeleteItemAsync<CustomFieldCollection>(item.id, new PartitionKey(item.id));
                     }
                 }
+
+                log.LogInformation($"All items with ID {id} deleted successfully");
+
                 return new OkResult();
             }
             catch (Exception ex)
             {
-                log.LogInformation($"DeleteCustomFieldCollection | Exception: {ex}");
-                return new NotFoundResult();
+                log.LogError($"Error deleting items with ID {id}: {ex.Message}");
+                return new StatusCodeResult(500);
             }
         }
+
+
 
     }
 }
